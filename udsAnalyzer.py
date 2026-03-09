@@ -236,6 +236,26 @@ def get_did_name(did: int) -> str:
         return "Netzwerk-/Sitzungsspezifischer DID-Bereich"
     return "Allgemeiner DID (fahrzeug- oder OEM-spezifisch)"
 
+def bytes_to_ascii(byte_values: list[int]) -> str:
+    if not byte_values:
+        return ""
+    chars = []
+    printable_count = 0
+    for value in byte_values:
+        if 32 <= value <= 126:
+            chars.append(chr(value))
+            printable_count += 1
+        elif value in (9, 10, 13):
+            chars.append(" ")
+            printable_count += 1
+        else:
+            chars.append(".")
+    ratio = printable_count / len(byte_values)
+    if ratio < 0.6:
+        return ""
+    return "".join(chars)
+
+
 def decode_payload(payload: list[int]) -> str:
     if not payload:
         return "Leere Payload"
@@ -254,7 +274,11 @@ def decode_payload(payload: list[int]) -> str:
         parts.append(f"Typ: NegativeResponse auf {req_name} (0x{req_sid:02X})")
         parts.append(f"NRC: {nrc_name} (0x{nrc:02X})")
         if len(payload) > 3:
-            parts.append(f"Zusatzdaten: {' '.join(f'{b:02X}' for b in payload[3:])}")
+            extra = payload[3:]
+            parts.append(f"Zusatzdaten: {' '.join(f'{b:02X}' for b in extra)}")
+            ascii_extra = bytes_to_ascii(extra)
+            if ascii_extra:
+                parts.append(f"ASCII: {ascii_extra}")
         return " | ".join(parts)
 
     is_positive = sid >= 0x40
@@ -272,6 +296,10 @@ def decode_payload(payload: list[int]) -> str:
         did = (payload[1] << 8) | payload[2]
         did_note = get_did_name(did)
         parts.append(f"DID: 0x{did:04X} ({did_note})")
+        if len(payload) > 3:
+            did_data_ascii = bytes_to_ascii(payload[3:])
+            if did_data_ascii:
+                parts.append(f"DID-ASCII: {did_data_ascii}")
 
     if base_sid == 0x27 and len(payload) >= 2:
         level = payload[1]
@@ -283,7 +311,11 @@ def decode_payload(payload: list[int]) -> str:
         parts.append(f"RoutineIdentifier: 0x{rid:04X}")
 
     if len(payload) > 1:
-        parts.append(f"Nutzdaten: {' '.join(f'{b:02X}' for b in payload[1:])}")
+        data_bytes = payload[1:]
+        parts.append(f"Nutzdaten: {' '.join(f'{b:02X}' for b in data_bytes)}")
+        ascii_data = bytes_to_ascii(data_bytes)
+        if ascii_data:
+            parts.append(f"ASCII: {ascii_data}")
 
     return " | ".join(parts)
 
