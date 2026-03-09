@@ -8,8 +8,6 @@ import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
 
-HEX_RE = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}(?![0-9A-Fa-f])")
-
 # ISO-14229 standard service names (known assignments)
 ISO_SERVICE_NAMES = {
     0x10: "DiagnosticSessionControl",
@@ -56,6 +54,31 @@ SERVICE_SUBFUNCTIONS = {
 ISO_NRC_NAMES = {
     0x10: "generalReject", 0x11: "serviceNotSupported", 0x12: "subFunctionNotSupported", 0x13: "incorrectMessageLengthOrInvalidFormat", 0x14: "responseTooLong", 0x21: "busyRepeatRequest", 0x22: "conditionsNotCorrect", 0x24: "requestSequenceError", 0x25: "noResponseFromSubnetComponent", 0x26: "failurePreventsExecutionOfRequestedAction", 0x31: "requestOutOfRange", 0x33: "securityAccessDenied", 0x34: "authenticationRequired", 0x35: "invalidKey", 0x36: "exceedNumberOfAttempts", 0x37: "requiredTimeDelayNotExpired", 0x38: "secureDataTransmissionRequired", 0x39: "secureDataTransmissionNotAllowed", 0x3A: "secureDataVerificationFailed", 0x50: "certificateVerificationFailedInvalidTimePeriod", 0x51: "certificateVerificationFailedInvalidSignature", 0x52: "certificateVerificationFailedInvalidChainOfTrust", 0x53: "certificateVerificationFailedInvalidType", 0x54: "certificateVerificationFailedInvalidFormat", 0x55: "certificateVerificationFailedInvalidContent", 0x56: "certificateVerificationFailedInvalidScope", 0x57: "certificateVerificationFailedInvalidCertificate", 0x58: "ownershipVerificationFailed", 0x59: "challengeCalculationFailed", 0x5A: "settingAccessRightsFailed", 0x5B: "sessionKeyCreationOrDerivationFailed", 0x5C: "configurationDataUsageFailed", 0x5D: "deAuthenticationFailed", 0x70: "uploadDownloadNotAccepted", 0x71: "transferDataSuspended", 0x72: "generalProgrammingFailure", 0x73: "wrongBlockSequenceCounter", 0x78: "requestCorrectlyReceivedResponsePending", 0x7E: "subFunctionNotSupportedInActiveSession", 0x7F: "serviceNotSupportedInActiveSession", 0x81: "rpmTooHigh", 0x82: "rpmTooLow", 0x83: "engineIsRunning", 0x84: "engineIsNotRunning", 0x85: "engineRunTimeTooLow", 0x86: "temperatureTooHigh", 0x87: "temperatureTooLow", 0x88: "vehicleSpeedTooHigh", 0x89: "vehicleSpeedTooLow", 0x8A: "throttlePedalTooHigh", 0x8B: "throttlePedalTooLow", 0x8C: "transmissionRangeNotInNeutral", 0x8D: "transmissionRangeNotInGear", 0x8F: "brakeSwitchNotClosed", 0x90: "shifterLeverNotInPark", 0x91: "torqueConverterClutchLocked", 0x92: "voltageTooHigh", 0x93: "voltageTooLow", 0x94: "resourceTemporarilyNotAvailable",
 }
+
+
+
+def extract_hex_bytes(line: str) -> list[int]:
+    """Extrahiert Bytes robust aus gemischter Hex-Schreibweise.
+
+    Unterstützt u. a.:
+    - Groß-/Kleinschreibung (aa, AA, aA)
+    - Präfixe wie 0xAA
+    - beliebige Trennzeichen (Leerzeichen, Komma, Bindestrich, etc.)
+    - zusammenhängende Hex-Zeichenfolgen mit gerader Länge (z. B. A1B2C3)
+    """
+    normalized = re.sub(r"0x", "", line, flags=re.IGNORECASE)
+    chunks = re.findall(r"[0-9A-Fa-f]+", normalized)
+    result: list[int] = []
+
+    for chunk in chunks:
+        if len(chunk) == 1:
+            continue
+        if len(chunk) % 2 == 1:
+            chunk = "0" + chunk
+        for i in range(0, len(chunk), 2):
+            result.append(int(chunk[i:i + 2], 16))
+
+    return result
 
 DID_NOTES = {
     0xF186: "ActiveDiagnosticSession", 0xF187: "VehicleManufacturerSparePartNumber", 0xF188: "VehicleManufacturerECUSoftwareNumber", 0xF189: "VehicleManufacturerECUSoftwareVersionNumber", 0xF18A: "SystemSupplierIdentifier", 0xF18B: "ECUManufacturingDate", 0xF18C: "ECUSerialNumber", 0xF18D: "SupportedFunctionalUnits", 0xF18E: "VehicleManufacturerKitAssemblyPartNumber", 0xF190: "VehicleIdentificationNumber (VIN)", 0xF191: "VehicleManufacturerECUHardwareNumber", 0xF192: "SystemSupplierECUHardwareNumber", 0xF193: "SystemSupplierECUHardwareVersionNumber", 0xF194: "SystemSupplierECUSoftwareNumber", 0xF195: "SystemSupplierECUSoftwareVersionNumber", 0xF196: "ExhaustRegulationOrTypeApprovalNumber", 0xF197: "SystemNameOrEngineType", 0xF198: "RepairShopCodeOrTesterSerialNumber", 0xF199: "ProgrammingDate", 0xF19A: "CalibrationRepairShopCodeOrCalibrationEquipmentSerialNumber", 0xF19B: "CalibrationDate", 0xF19C: "CalibrationEquipmentSoftwareNumber", 0xF19D: "ECUInstallationDate", 0xF19E: "ODXFileIdentifier", 0xF19F: "Entity",
@@ -202,9 +225,9 @@ def decode_payload(payload: list[int]) -> str:
 def decode_text(raw_text: str) -> str:
     lines = []
     for idx, line in enumerate(raw_text.splitlines(), start=1):
-        tokens = HEX_RE.findall(line)
-        if tokens:
-            lines.append(f"Zeile {idx}: {decode_payload([int(t, 16) for t in tokens])}")
+        payload = extract_hex_bytes(line)
+        if payload:
+            lines.append(f"Zeile {idx}: {decode_payload(payload)}")
     return "\n".join(lines) if lines else "Keine gültigen UDS-Bytes erkannt. Bitte Hex-Bytes wie z.B. '10 03' einfügen."
 
 
